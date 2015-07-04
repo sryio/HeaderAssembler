@@ -63,8 +63,6 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 		std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"rt, ccs=UTF-8"), fclose);
 		std::wifstream fs(fp.get());
 
-		g_included_header.insert(filename);
-
 		std::wstring line;
 
 		std::wregex once_regex(LR"=(^\s*#\s*pragma\s*once\s*$)=");
@@ -76,6 +74,7 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 			std::wsmatch stdmatches, mymatches;
 			if(std::regex_match(line, once_regex))
 			{
+				g_included_header.insert(filename); //Ê¶±ð#pragma once
 				continue;
 			}
 			else if(std::regex_match(line, stdmatches, std_header_regex))
