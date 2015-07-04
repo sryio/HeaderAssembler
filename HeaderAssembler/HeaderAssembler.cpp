@@ -18,18 +18,34 @@ namespace fs = std::experimental::filesystem;
 
 std::set<std::wstring> g_std_headers;
 std::set<std::wstring> g_included_header;
+std::list<fs::path> g_search_pathes;
 
-fs::path Resolve(fs::path path, fs::path relative)
+void InitSearchPathes()
 {
-	auto filepath = fs::absolute(path, relative);
-	if(fs::exists(filepath))
-		return filepath;
+	if(__argc < 4)
+		return;
 
-	filepath = fs::absolute(path);
-	if(!fs::exists(filepath))
-		throw std::runtime_error("无法定位文件：" + path.filename().string());
+	std::string arg = __argv[3];
+	std::regex rgx(R"(\s*;\s*)");
 
-	return filepath;
+	std::vector<std::wstring> pathes;
+	for(auto it = std::sregex_token_iterator(arg.cbegin(), arg.cend(), rgx, -1); it != std::sregex_token_iterator(); ++it)
+	{
+		g_search_pathes.push_back(it->str());
+	}
+}
+
+fs::path Resolve(fs::path path)
+{
+	for(auto& p : g_search_pathes)
+	{
+		auto filepath = fs::absolute(path, p);
+
+		if(fs::exists(filepath))
+			return filepath;
+	}
+	
+	throw std::runtime_error("无法定位文件：" + path.filename().string());
 }
 
 
@@ -40,6 +56,8 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 
 	if(g_included_header.cend() == g_included_header.find(filename))
 	{
+		path = Resolve(path);
+
 		std::cout << "读取 " << path.string() << std::endl;
 
 		std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"rt, ccs=UTF-8"), fclose);
@@ -66,8 +84,11 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 			}
 			else if(std::regex_match(line, mymatches, my_header_regex))
 			{
-				auto filepath = Resolve(mymatches[1].str(), path.parent_path());
-				auto sublines = AssembleHeader(filepath);
+				g_search_pathes.push_front(path.parent_path());
+
+				auto sublines = AssembleHeader(mymatches[1].str());
+				g_search_pathes.pop_front();
+
 				std::copy(sublines.cbegin(), sublines.cend(), std::back_inserter(lines));
 			}
 			else
@@ -112,12 +133,16 @@ void SaveLines(std::list<std::wstring> lines, fs::path path)
 
 int main(int argc, char* argv[])
 {
+	system("chcp 936");
+
 	try
 	{
 		if(argc < 3)
-			throw std::invalid_argument("调用方式：assembler from.h to.h");
+			throw std::invalid_argument("调用方式：assembler from.h to.h [searchpath1;searchpath2;...]");
 
-		auto srcpath = fs::absolute(argv[1]);
+		InitSearchPathes();
+
+		auto srcpath = argv[1];
 		auto lines = AssembleHeader(srcpath);
 
 		auto destpath = fs::path(argv[2]);
