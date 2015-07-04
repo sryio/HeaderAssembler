@@ -12,6 +12,8 @@
 #include <filesystem>
 #include <stdexcept>
 #include <algorithm>
+#include <iomanip>
+#include <ctime>
 namespace fs = std::experimental::filesystem;
 
 std::set<std::wstring> g_std_headers;
@@ -86,9 +88,15 @@ void SaveLines(std::list<std::wstring> lines, fs::path path)
 
 	std::cout << "保存至：" << path.string() << std::endl;
 
-	fs << L"#pragma once" << std::endl;
+	auto time = std::time(nullptr);
+	std::tm tm = {0};
+	localtime_s(&tm, &time);
+
+
+	fs << L"#pragma once" << std::endl << std::endl;
 	fs << L"/******本文件由 Header Assembler 自动生成，请勿手动修改******/" << std::endl;
-	fs << L"/******"
+	fs << L"/***** https://github.com/icexile/HeaderAssembler.git *****/" << std::endl;
+	fs << L"/************** 生成时间：" << std::put_time(&tm, L"%c") << L" ****************/" << std::endl << std::endl << std::endl;
 	
 	for(auto& header : g_std_headers)
 	{
