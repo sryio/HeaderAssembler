@@ -107,7 +107,7 @@ void SaveLines(std::list<std::wstring> lines, fs::path path)
 	std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"wt, ccs=UTF-8"), fclose);
 	std::wofstream fs(fp.get());
 
-	std::cout << "保存至：" << path.string() << std::endl;
+	std::cout << "合并至：" << path.string() << std::endl;
 
 	auto time = std::time(nullptr);
 	std::tm tm = {0};
@@ -134,6 +134,8 @@ void SaveLines(std::list<std::wstring> lines, fs::path path)
 int main(int argc, char* argv[])
 {
 	system("chcp 936");
+
+	std::cout << "头文件自动合并开始：" << std::endl;
 
 	try
 	{
