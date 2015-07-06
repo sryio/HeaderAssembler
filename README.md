@@ -9,8 +9,11 @@
 
 # Mac 下编译
 
-首先来到这里 http://brew.sh/，安装Homebrew Package Manager，之后运行：
+首先来到这里
 
+[http://brew.sh](http://brew.sh)
+
+安装Homebrew Package Manager，之后运行：
 ```
 brew install boost
 ```
