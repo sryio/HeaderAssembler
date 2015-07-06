@@ -1,4 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS
+ï»¿#define _CRT_SECURE_NO_WARNINGS
 
 #include <cstdio>
 #include <iostream>
@@ -9,26 +9,33 @@
 #include <list>
 #include <vector>
 #include <set>
-#include <filesystem>
 #include <stdexcept>
 #include <algorithm>
 #include <iomanip>
 #include <ctime>
-namespace fs = std::experimental::filesystem;
+#include <codecvt>
+
+#ifdef _WIN32
+#	include <filesystem>
+	namespace fs = std::experimental::filesystem;
+#else
+#	include <boost/filesystem.hpp>
+	namespace fs = boost::filesystem;
+#endif
 
 std::set<std::wstring> g_std_headers;
 std::set<std::wstring> g_included_header;
 std::list<fs::path> g_search_pathes;
 
-void InitSearchPathes()
+
+void InitSearchPathes(int argc, char* argv[])
 {
-	if(__argc < 4)
+	if(argc < 4)
 		return;
 
-	std::string arg = __argv[3];
+	std::string arg = argv[3];
 	std::regex rgx(R"(\s*;\s*)");
 
-	std::vector<std::wstring> pathes;
 	for(auto it = std::sregex_token_iterator(arg.cbegin(), arg.cend(), rgx, -1); it != std::sregex_token_iterator(); ++it)
 	{
 		g_search_pathes.push_back(it->str());
@@ -45,7 +52,7 @@ fs::path Resolve(fs::path path)
 			return filepath;
 	}
 	
-	throw std::runtime_error("ÎŞ·¨¶¨Î»ÎÄ¼ş£º" + path.filename().string());
+	throw std::runtime_error("æ— æ³•å®šä½æ–‡ä»¶ï¼š" + path.filename().string());
 }
 
 
@@ -58,10 +65,21 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 	{
 		path = Resolve(path);
 
-		std::cout << "¶ÁÈ¡ " << path.string() << std::endl;
+		std::cout << "è¯»å– " << path.string() << std::endl;
 
+#ifdef _WIN32
 		std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"rt, ccs=UTF-8"), fclose);
 		std::wifstream fs(fp.get());
+#else
+        
+		std::ifstream nfs(path.string().c_str());
+		std::wbuffer_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> wb(nfs.rdbuf());
+		std::wistream fs(&wb);
+
+		auto ch = fs.get();
+		if(0xFEFF != ch)
+            fs.putback(ch);
+#endif
 
 		std::wstring line;
 
@@ -74,7 +92,7 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 			std::wsmatch stdmatches, mymatches;
 			if(std::regex_match(line, once_regex))
 			{
-				g_included_header.insert(filename); //Ê¶±ğ#pragma once
+				g_included_header.insert(filename); //è¯†åˆ«#pragma once
 				continue;
 			}
 			else if(std::regex_match(line, stdmatches, std_header_regex))
@@ -103,20 +121,27 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 
 void SaveLines(std::list<std::wstring> lines, fs::path path)
 {
+#ifdef _WIN32
 	std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"wt, ccs=UTF-8"), fclose);
 	std::wofstream fs(fp.get());
+#else
+    
+    std::ofstream nfs(path.string().c_str());
+    
+	std::wbuffer_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> wb(nfs.rdbuf());
+	std::wostream fs(&wb);
 
-	std::cout << "ºÏ²¢ÖÁ£º" << path.string() << std::endl;
+#endif
+
+	std::cout << "åˆå¹¶è‡³ï¼š" << path.string() << std::endl;
 
 	auto time = std::time(nullptr);
-	std::tm tm = {0};
-	localtime_s(&tm, &time);
-
+	auto tm = localtime(&time);
 
 	fs << L"#pragma once" << std::endl << std::endl;
-	fs << L"/******±¾ÎÄ¼şÓÉ Header Assembler ×Ô¶¯Éú³É£¬ÇëÎğÊÖ¶¯ĞŞ¸Ä******/" << std::endl;
+	fs << L"/******æœ¬æ–‡ä»¶ç”± Header Assembler è‡ªåŠ¨ç”Ÿæˆï¼Œè¯·å‹¿æ‰‹åŠ¨ä¿®æ”¹******/" << std::endl;
 	fs << L"/***** https://github.com/icexile/HeaderAssembler.git *****/" << std::endl;
-	fs << L"/************** Éú³ÉÊ±¼ä£º" << std::put_time(&tm, L"%c") << L" ****************/" << std::endl << std::endl << std::endl;
+	fs << L"/************** ç”Ÿæˆæ—¶é—´ï¼š" << std::put_time(tm, L"%c") << L" ****************/" << std::endl << std::endl << std::endl;
 	
 	for(auto& header : g_std_headers)
 	{
@@ -132,16 +157,18 @@ void SaveLines(std::list<std::wstring> lines, fs::path path)
 
 int main(int argc, char* argv[])
 {
+#ifdef _WIN32
 	system("chcp 936");
+#endif
 
-	std::cout << "Í·ÎÄ¼ş×Ô¶¯ºÏ²¢¿ªÊ¼£º" << std::endl;
+	std::cout << "å¤´æ–‡ä»¶è‡ªåŠ¨åˆå¹¶å¼€å§‹ï¼š" << std::endl;
 
 	try
 	{
 		if(argc < 3)
-			throw std::invalid_argument("µ÷ÓÃ·½Ê½£ºassembler from.h to.h [searchpath1;searchpath2;...]");
+			throw std::invalid_argument("è°ƒç”¨æ–¹å¼ï¼šassembler from.h to.h [searchpath1;searchpath2;...]");
 
-		InitSearchPathes();
+		InitSearchPathes(argc, argv);
 
 		auto srcpath = argv[1];
 		auto lines = AssembleHeader(srcpath);
@@ -156,7 +183,11 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	std::cout << "³É¹¦£¡" << std::endl;
-	std::cin.get();
+	std::cout << "æˆåŠŸï¼" << std::endl;
+
+#if (defined _WIN32) && (defined _DEBUG)
+	system("pause");
+#endif
+
 	return 0;
 }
