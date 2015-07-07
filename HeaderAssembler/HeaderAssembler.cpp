@@ -13,7 +13,9 @@
 #include <algorithm>
 #include <iomanip>
 #include <ctime>
+#include <locale>
 #include <codecvt>
+#include <iterator>
 
 #ifdef _WIN32
 #	include <filesystem>
@@ -23,9 +25,9 @@
 	namespace fs = boost::filesystem;
 #endif
 
-std::set<std::wstring> g_std_headers;
-std::set<std::wstring> g_included_header;
-std::list<fs::path> g_search_pathes;
+std::set<std::wstring>	g_std_headers;
+std::set<std::wstring>	g_included_header;
+std::list<fs::path>		g_search_pathes;
 
 
 void InitSearchPathes(int argc, char* argv[])
@@ -40,6 +42,14 @@ void InitSearchPathes(int argc, char* argv[])
 	{
 		g_search_pathes.push_back(it->str());
 	}
+
+	std::cout << "初始化搜索路径：" << std::endl;
+	for(auto& path : g_search_pathes)
+	{
+		std::cout << path << std::endl;
+	}
+
+	std::cout << std::endl;
 }
 
 fs::path Resolve(fs::path path)
@@ -67,19 +77,8 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 
 		std::cout << "读取 " << path.string() << std::endl;
 
-#ifdef _WIN32
-		std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"rt, ccs=UTF-8"), fclose);
-		std::wifstream fs(fp.get());
-#else
-        
-		std::ifstream nfs(path.string().c_str());
-		std::wbuffer_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> wb(nfs.rdbuf());
-		std::wistream fs(&wb);
-
-		auto ch = fs.get();
-		if(0xFEFF != ch)
-            fs.putback(ch);
-#endif
+		std::wifstream fs(path.string().c_str());
+		fs.imbue(std::locale(std::locale::classic(), new std::codecvt_utf8<wchar_t, 0x10FFFF, std::consume_header>));
 
 		std::wstring line;
 
@@ -121,37 +120,34 @@ std::list<std::wstring> AssembleHeader(fs::path path)
 
 void SaveLines(std::list<std::wstring> lines, fs::path path)
 {
-#ifdef _WIN32
-	std::shared_ptr<FILE> fp(_wfopen(path.wstring().c_str(), L"wt, ccs=UTF-8"), fclose);
-	std::wofstream fs(fp.get());
-#else
-    
-    std::ofstream nfs(path.string().c_str());
-    
-	std::wbuffer_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> wb(nfs.rdbuf());
-	std::wostream fs(&wb);
-
-#endif
-
 	std::cout << "合并至：" << path.string() << std::endl;
 
 	auto time = std::time(nullptr);
-	auto tm = localtime(&time);
+	std::wostringstream buffer;
 
-	fs << L"#pragma once" << std::endl << std::endl;
-	fs << L"/******本文件由 Header Assembler 自动生成，请勿手动修改******/" << std::endl;
-	fs << L"/***** https://github.com/icexile/HeaderAssembler.git *****/" << std::endl;
-	fs << L"/************** 生成时间：" << std::put_time(tm, L"%c") << L" ****************/" << std::endl << std::endl << std::endl;
-	
+	buffer << (wchar_t)0xFEFF;
+	buffer << L"#pragma once\r\n\r\n";
+	buffer << L"// 本文件由 Header Assembler 自动生成，请勿手动修改\r\n";
+	buffer << L"// https://github.com/icexile/HeaderAssembler \r\n";
+	buffer << L"// 生成时间：" << std::put_time(localtime(&time), L"%c") << L"\r\n\r\n\r\n";
+
 	for(auto& header : g_std_headers)
 	{
-		fs << L"#include <" << header << ">" << std::endl;
+		buffer << L"#include <" << header << ">\r\n";
 	}
 
-	for(auto& line : lines)
+	for(auto line : lines)
 	{
-		fs << line << std::endl;
+		line.erase(std::remove_if(line.begin(), line.end(), [](wchar_t ch) { return ch == L'\r' || ch == L'\n'; }), line.end());
+		buffer << line << L"\r\n";
 	}
+
+	std::ofstream nfs(path.string().c_str(), std::ios::binary);
+
+	std::wstring_convert<std::codecvt_utf8<wchar_t>> wc;
+	auto utf8 = wc.to_bytes(buffer.str());
+	
+	std::copy(utf8.cbegin(), utf8.cend(), std::ostreambuf_iterator<char>(nfs));
 }
 
 
@@ -161,6 +157,7 @@ int main(int argc, char* argv[])
 	system("chcp 936");
 #endif
 
+    std::ios::sync_with_stdio(false);
 	std::cout << "头文件自动合并开始：" << std::endl;
 
 	try
